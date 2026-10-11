@@ -1,0 +1,53 @@
+name: Aggiorna effemeridi
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scarica il file delle effemeridi
+        run: |
+          Y=$(date -u +%Y); D=$(date -u +%j)
+          TAIL="_R_${Y}${D}0000_01D_MN.rnx.gz"
+          ok=0
+          for u in \
+            "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/$Y/$D/BRDC00WRD$TAIL" \
+            "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/$Y/$D/BRDC00IGS$TAIL" \
+            "https://igs.bkg.bund.de/root_ftp/EUREF/BRDC/$Y/$D/BRDC00WRD$TAIL" \
+            "https://igs.ign.fr/pub/igs/data/$Y/$D/BRDC00IGN$TAIL" \
+            "https://igs.ign.fr/pub/igs/data/$Y/$D/BRDC00IGS$TAIL" \
+            "https://epncb.oma.be/pub/obs/BRDC/$Y/$D/BRDC00IGS$TAIL" \
+            "https://files.igs.org/pub/data/BRDC/$Y/$D/BRDC00IGS$TAIL" \
+            "https://igs.gnsswhu.cn/pub/gps/data/daily/$Y/brdc/BRDC00IGS$TAIL"
+          do
+            echo "provo $u"
+            if curl -fsSL --max-time 120 -o brdc.tmp "$u" \
+               && [ "$(stat -c %s brdc.tmp)" -gt 100000 ] && gzip -t brdc.tmp; then
+              mv brdc.tmp BRDC.rnx.gz
+              echo "OK: $u"
+              ok=1
+              break
+            fi
+          done
+          if [ "$ok" != "1" ]; then echo "nessun archivio ha risposto"; exit 1; fi
+
+      - name: Pubblica sul ramo data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          mkdir -p /tmp/out && cp BRDC.rnx.gz /tmp/out/
+          git checkout --orphan data
+          git rm -rf . -q
+          cp /tmp/out/BRDC.rnx.gz .
+          git add BRDC.rnx.gz
+          git commit -q -m "BRDC $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f origin data
