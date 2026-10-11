@@ -30,13 +30,12 @@ jobs:
           Y=$(date -u +%Y); D=$(date -u +%j); YY=$(date -u +%y)
           TAIL="_R_${Y}${D}0000_01D_MN.rnx.gz"
           ok=0
+          B="https://cddis.nasa.gov/archive/gnss/data"
           for u in \
-            "https://cddis.nasa.gov/archive/gnss/data/daily/$Y/brdc/BRDC00IGS$TAIL" \
-            "https://cddis.nasa.gov/archive/gnss/data/hourly/$Y/$D/BRDC00IGS$TAIL" \
-            "https://cddis.nasa.gov/archive/gnss/data/daily/$Y/brdc/BRDC00WRD$TAIL" \
-            "https://igs.ign.fr/pub/igs/data/$Y/$D/BRDC00IGN$TAIL" \
-            "https://epncb.oma.be/pub/obs/BRDC/$Y/$D/BRDC00IGS$TAIL" \
-            "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/$Y/$D/BRDC00WRD$TAIL"
+            "$B/daily/$Y/$D/${YY}p/BRDC00IGS$TAIL" \
+            "$B/daily/$Y/$D/${YY}p/BRDC00IGS_R_${Y}${D}0000_01D_MN.rnx.gz" \
+            "$B/daily/$Y/brdc/brdc${D}0.${YY}n.gz" \
+            "$B/hourly/$Y/$D/hour${D}0.${YY}n.gz"
           do
             case "$u" in
               *cddis.nasa.gov*) [ -z "$EDL_USER" ] && continue ;;
@@ -45,7 +44,7 @@ jobs:
             rm -f brdc.tmp cj.txt
             if curl -fsSL --connect-timeout 15 --max-time 90 --netrc-file "$HOME/.netrc" \
                  -c cj.txt -b cj.txt -o brdc.tmp "$u" \
-               && [ "$(stat -c %s brdc.tmp)" -gt 100000 ] && gzip -t brdc.tmp; then
+               && [ "$(stat -c %s brdc.tmp)" -gt 10000 ] && gzip -t brdc.tmp; then
               mv brdc.tmp BRDC.rnx.gz
               echo "OK: $u"
               ok=1
