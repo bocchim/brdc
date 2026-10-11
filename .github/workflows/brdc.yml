@@ -15,22 +15,36 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Scarica il file delle effemeridi
+        env:
+          EDL_USER: ${{ secrets.EARTHDATA_USER }}
+          EDL_PASS: ${{ secrets.EARTHDATA_PASS }}
         run: |
-          Y=$(date -u +%Y); D=$(date -u +%j)
+          # accesso NASA Earthdata (salvato nei Secrets, mai nel codice)
+          if [ -n "$EDL_USER" ]; then
+            printf 'machine urs.earthdata.nasa.gov login %s password %s\n' "$EDL_USER" "$EDL_PASS" > "$HOME/.netrc"
+            chmod 600 "$HOME/.netrc"
+            echo "credenziali Earthdata presenti"
+          else
+            echo "credenziali Earthdata NON impostate (CDDIS verra' saltato)"
+          fi
+          Y=$(date -u +%Y); D=$(date -u +%j); YY=$(date -u +%y)
           TAIL="_R_${Y}${D}0000_01D_MN.rnx.gz"
           ok=0
           for u in \
-            "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/$Y/$D/BRDC00WRD$TAIL" \
-            "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/$Y/$D/BRDC00IGS$TAIL" \
-            "https://igs.bkg.bund.de/root_ftp/EUREF/BRDC/$Y/$D/BRDC00WRD$TAIL" \
+            "https://cddis.nasa.gov/archive/gnss/data/daily/$Y/brdc/BRDC00IGS$TAIL" \
+            "https://cddis.nasa.gov/archive/gnss/data/hourly/$Y/$D/BRDC00IGS$TAIL" \
+            "https://cddis.nasa.gov/archive/gnss/data/daily/$Y/brdc/BRDC00WRD$TAIL" \
             "https://igs.ign.fr/pub/igs/data/$Y/$D/BRDC00IGN$TAIL" \
-            "https://igs.ign.fr/pub/igs/data/$Y/$D/BRDC00IGS$TAIL" \
             "https://epncb.oma.be/pub/obs/BRDC/$Y/$D/BRDC00IGS$TAIL" \
-            "https://files.igs.org/pub/data/BRDC/$Y/$D/BRDC00IGS$TAIL" \
-            "https://igs.gnsswhu.cn/pub/gps/data/daily/$Y/brdc/BRDC00IGS$TAIL"
+            "https://igs.bkg.bund.de/root_ftp/IGS/BRDC/$Y/$D/BRDC00WRD$TAIL"
           do
+            case "$u" in
+              *cddis.nasa.gov*) [ -z "$EDL_USER" ] && continue ;;
+            esac
             echo "provo $u"
-            if curl -fsSL --max-time 120 -o brdc.tmp "$u" \
+            rm -f brdc.tmp cj.txt
+            if curl -fsSL --connect-timeout 15 --max-time 90 --netrc-file "$HOME/.netrc" \
+                 -c cj.txt -b cj.txt -o brdc.tmp "$u" \
                && [ "$(stat -c %s brdc.tmp)" -gt 100000 ] && gzip -t brdc.tmp; then
               mv brdc.tmp BRDC.rnx.gz
               echo "OK: $u"
